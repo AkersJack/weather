@@ -11,21 +11,26 @@ import base64
 import shutil
 from sklearn.impute import KNNImputer
 
+
+# Checks to ensure that all images are radar images and not copyright or error images
 def check_images(): 
-    pictures = os.listdir("D:/weather")
+    image_directory = "./weather"
+    pictures = os.listdir(image_directory) # image directory 
     counter = 0
     for picture in pictures:
         if counter % 100 == 0: 
             print(f"{counter}/{len(pictures)}")
-        image_path = os.path.join("D:/weather/", picture)
-        image = Image.open(image_path)
+        image_path = os.path.join(image_directory, picture) # image 
+        image = Image.open(image_path) 
         width, height = image.size
-        # print(f"Width: {width}, Height: {height}")
+
+        # check to make sure it is an actual radar image and not an error image
         if width != 760 or height != 616: 
             print(f"Bad size: {picture} ")
             time.sleep(10)
         counter += 1
 
+# Parse the text for the data (parses out the amount of rain and where it happened)
 def parsetext(text):
     regex = r"^(.*?)\|(.*?)\|(.*?)$"
     match = re.match(regex, text)
@@ -54,12 +59,15 @@ def parsetext(text):
         print("No match found")
     return amount_format, location_format
 
+
+# Clean up the data by combining images with precipitation into 1 csv file by date 
 def cleanup():
     labels = ["Carroll County", "Baltimore MD", "Gaithersburg", "Baltimore-Martin MD"]
-    csv_f = "D:/project/Data.csv"
+
+    csv_f = "./Data.csv"
     image_dict = {}
 
-    with open("D:/project/data_new.json", "r") as f: 
+    with open("data_new.json", "r") as f: 
         data = json.load(f)
     
     print("Cleaning up...")
@@ -73,20 +81,15 @@ def cleanup():
             try:
                 if data[x]["picture"] != None:
                     try: 
-                        # print(data[x]["precipitation"])
-                        # image_data = Image.open(os.path.join("D:/weather/", data[x]["picture"]))
-                        # with open(os.path.join("D:/weather/", data[x]["picture"]), 'rb') as image_file:
-                        #     image_data = image_file.read()
-                        # pixel_data = list(image.getdata()) 
-                        # serialized_data = json.dumps(pixel_data)
-                        # serialized_data = pickle.dumps(image_data)
-                        # image_dict[counter] = [base64.b64encode(serialized_data).decode('utf-8')]
                         
                         # No rain most likely if it didn't record any precipitation
                         write_list = [0, 0, 0, 0, 0, data[x]["picture"]]
-                        source = os.path.join("D:/weather/", data[x]["picture"])
-                        destination = os.path.join("D:/weather_used/", data[x]["picture"])
-                        # if (data[x]["picture"]) not in image_dict:
+
+                        # Move pictures from the general weather directory (where all scraped images were stored)
+                        # to weather_used (which is only images that are used in the dataset)
+                        source = os.path.join("./weather/", data[x]["picture"])
+                        destination = os.path.join("./weather_used/", data[x]["picture"])
+
                         image_dict[data[x]["picture"]] = destination
 
                         if "precipitation" not in data[x]:
@@ -94,6 +97,7 @@ def cleanup():
                             # counter += 1
                             pass
                         else: 
+                            # copy the image to the new location 
                             shutil.copy(source, destination)
                             for i in data[x]["precipitation"]:
                                 amount, location = parsetext(i)
@@ -131,12 +135,14 @@ def cleanup():
             except Exception as enopic:
                 print(f"No picture available skipping.")
 
-    # with open("D:/project/Images.json", "w") as imageFile:
-    #     json.dump(image_dict, imageFile, indent = 4)
+
+    with open("Images.json", "w") as imageFile:
+        json.dump(image_dict, imageFile, indent = 4)
         
 
     print(f"Counter: {counter}")
 
+# used to parse the measurement and the location out of the json file of collected data 
 def parseTree(text):
     regex = r"([0-9,]+[\.0-9]*)\s*\|\s*(.*?)\s*\("
     match = re.search(regex, text)
@@ -148,6 +154,8 @@ def parseTree(text):
     return amount, location
      
 
+# used to combine all the json data into 1 file 
+# this was manually done for each item  
 def cleanupTree(): 
     labels_precip = ["Carroll County", "Baltimore MD", "Gaithersburg", "Baltimore-Martin MD"]
     # labels_pressure = ["FSNM2", "Baltimore MD", "Baltimore-Martin MD", "Gaithersburg", "TCBM2", "BUOY", "SHIP", "Patapsco", "BLTM2", "FSKM2"]
@@ -176,7 +184,7 @@ def cleanupTree():
     print(label)
     
 
-    with open("D:/project/data_new_tree.json", "r") as f: 
+    with open("/data_new_tree.json", "r") as f: 
         data = json.load(f)
 
 
@@ -275,9 +283,11 @@ def cleanupTree():
         print(f"Total valid Data: {total_valid_data}")
             
             
-# K-Nearest Neighbor (KNN) with N = 5
+# K-Nearest Neighbor (KNN) with N = 5 (fill in missing data)
+# Data_tree_imputed is only the tree data with the imputed data added in 
+# data_tree_full is all the data_tree_imputed data + precipitation data 
 def imputate():
-    data = pd.read_csv('D:/project/Data_tree.csv')
+    data = pd.read_csv('./Data_tree.csv')
     # data = data.iloc[:, :-1]
     dates = data.pop("time")
     missing_columns = data.columns[data.isna().any()]
@@ -286,16 +296,16 @@ def imputate():
     data_imputed_df = pd.DataFrame(data_imputed, columns=data.columns)
     data = data_imputed_df
     data.insert(len(data.columns), "time", dates)
-    data.to_csv('D:/project/Data_tree_imputed.csv', index=False)
+    data.to_csv('./Data_tree_imputed.csv', index=False)
     print("Done")
 
         
-    
+# Add precipitation data with the imputated data (all data is now in 1 file)  
 def Addprecipitation():
     label_r = ["Carroll County", "Baltimore MD", "Gaithersburg", "Baltimore-Martin MD","NoRain", "Image"]
-    with open("D:/project/data_new.json", "r") as f: 
+    with open("./data_new.json", "r") as f: 
         data = json.load(f)
-    file_path = "D:/project/Data_tree_imputed.csv"
+    file_path = "./Data_tree_imputed.csv"
     count = 0
     df = pd.read_csv(file_path)
     precipitation = len(df) * [None]
@@ -338,7 +348,7 @@ def Addprecipitation():
     df.insert(len(df.columns), "precipitation", precipitation)
     df_cleaned = df.dropna()
     print(df_cleaned)
-    df_cleaned.to_csv('D:/project/Data_tree_full.csv', index=False)
+    df_cleaned.to_csv('./Data_tree_full.csv', index=False)
 
       
              

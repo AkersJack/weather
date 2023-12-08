@@ -37,12 +37,13 @@ wb_data_file = open("data_wb.json", "r")
 wb_data = json.load(wb_data_file)
 wb_data_file.close()
 
-file = open("D:/project/data_new.json", 'r')
+file = open("./data_new.json", 'r')
 master_data = json.load(file)
 file.close()
 
-def parseKey(key): 
 
+
+def parseKey(key): 
     regex = r"(\d{4})-(\d{2})-(\d{2})/(\d{2}):(\d{2})"
     match = re.search(regex, key)
     if match:
@@ -58,7 +59,7 @@ def parseKey(key):
     return(dt)
     
 
-
+# Used to parse the images file names to get the actual date time so they can be matched with the precip data 
 def parseFile(filename):
     regex = r"(\d{4})-(\d{2})-(\d{2})\.(\d{2})_(\d{2})_(\d{2})\.png"
     match = re.search(regex, filename)
@@ -82,7 +83,11 @@ def parseFile(filename):
         print("Error: No match found: {filename}")
     return dt
 
+
 if __name__ == "__main__": 
+    # Merging all the data to 1 file was manually done for each of the commented items 
+
+
     # master_data = {}
     
     # merge_item = 
@@ -112,6 +117,7 @@ if __name__ == "__main__":
     # merge_item = precip_data
     # key_label = "precipitation"
 
+    
     def combineFiles(merge_item, key_label):
         print("Combining...")
         for key in merge_item: 
@@ -122,7 +128,7 @@ if __name__ == "__main__":
             else: 
                 master_data[key] = merge_item[key]
             
-        with open("D:/project/data_new.json", "w") as f: 
+        with open("./data_new.json", "w") as f: 
             # master_data.update(precip_data)
             json.dump(master_data, f, indent = 4)
 
@@ -135,7 +141,10 @@ if __name__ == "__main__":
 
     # Image Combine
 
-    pictures = os.listdir("D:/weather")
+    # This takes a lot of time to run because it goes through all 100,000 images each time to find the an image whose date and time most closely matches the precip date and time. 
+    # Dynamic programming would drastically increase the speed 
+
+    pictures = os.listdir("./weather")
     # for picture in pictures: 
         # ptime = parseFile(picture)
         
@@ -164,7 +173,7 @@ if __name__ == "__main__":
                 # print(f"Master Dict: {k_time}")
                 # print(f"Picture: {ptime}")
                 
-                # loaded_image = Image.open(os.path.join("D:/weather/", picture))
+                # loaded_image = Image.open(os.path.join("./weather/", picture))
                 # width, height = loaded_image.size
                 
                 # if width == 760 and height == 616: 
@@ -196,13 +205,13 @@ if __name__ == "__main__":
             # print("New Key")
             master_data[key]["picture"] = best_possible_picture
             if count % 1000 == 0: 
-                with open("D:/project/data_new.json", "w") as f: 
+                with open("./data_new.json", "w") as f: 
                     json.dump(master_data, f, indent = 4) 
         else:
             print("Key already exists")
             pass
                 
-    with open("D:/project/data_new.json", "w") as f: 
+    with open("./data_new.json", "w") as f: 
         json.dump(master_data, f, indent = 4) 
 
     

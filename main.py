@@ -18,7 +18,9 @@ from torch.nn import functional as F
 from skimage.transform import resize
 import json
 import csv 
-
+from matplotlib import pyplot as plt 
+import random 
+from math import pi 
 def show_images(image):
     plt.imshow(image)
 
@@ -40,30 +42,27 @@ class MyDataset(torch.utils.data.Dataset):
         return len(self.labels)
     
     def __getitem__(self, index): 
-        location = "./Data_tree_full.csv"
-        tree = pd.read_csv(location)
-        with open("data_new.json", 'r') as f: 
-            data = json.load(f)
-        tree["time"][index]
-        for x in tree["time"]:
-            if x in data: 
-                if data[x]["picture"] != None:
-                    image_path = os.path.join("./weather_used/", data[x]["picture"])
-        
-
-
-        # print(f"image_path")
+        # Uncomment to get data for the randomforest 
+        # location = "./Data_tree_full.csv"
+        # tree = pd.read_csv(location)
+        # with open("data_new.json", 'r') as f: 
+        #     data = json.load(f)
+        # tree["time"][index]
+        # for x in tree["time"]:
+        #     if x in data: 
+        #         if data[x]["picture"] != None:
+        #             image_path = os.path.join("./weather_used/", data[x]["picture"])
         image_path = os.path.join(self.data_path, self.labels.iloc[index, 5])
         image = io.imread(image_path)
         # new_width = int(image.shape[1] * 0.39) # 228
         # new_height = int(image.shape[0] * 0.39) # 184
-        # new_width = 224
-        # new_height = 224
+        new_width = 224
+        new_height = 224
         # print(f"New width: {new_width}")
         # print(f"New height: {new_height}")
         # image = resize(image, (new_height, new_width), anti_aliasing=True)
-        # image = transform.resize(image, (224, 224))
-        # image = transform.resize(image, (new_height, new_width), antialias=True)
+
+        image = transform.resize(image, (224, 224))
         # image = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(image)
 
         image = image.transpose((2, 0, 1)) # Go from H, W, C to C, H, W which the network expects
@@ -79,35 +78,23 @@ class MyDataset(torch.utils.data.Dataset):
         
         # Convert image and label to tensors 
         image = torch.from_numpy(image).float()
-        original_w, original_h = image.shape[1], image.shape[2]
-        aspect_ratio = original_w / original_h
-        target_size = (224, 224)
-        if target_size[0] / target_size[1] > aspect_ratio:
-            # Width is larger than the desired aspect ratio
-            padded_width = target_size[0]
-            padded_height = int(padded_width / aspect_ratio)
-        else:
-            # Height is larger than the desired aspect ratio
-            padded_height = target_size[1]
-            padded_width = int(padded_height * aspect_ratio)
-
-        h_padding = (padded_width - original_w) // 2
-        v_padding = (padded_height - original_h) // 2
-        padding = (h_padding, v_padding, h_padding, v_padding)
-        padded_img_tensor = transforms.Pad(padding, padding_mode='reflect')(image)
-        image = transforms.Resize(target_size, antialias=True)(padded_img_tensor)
-
         label = torch.tensor(label).float()
+        # image = self.random_rotation(image)
         # image = transforms.Normalize(mean=[0.0081, 0.0132, 0.0119], std=[0.0081, 0.0132, 0.0119])(image)
-        # image = transforms.Normalize(mean=[0.0163, 0.0265, 0.0239], std=[0.0163, 0.0265, 0.0239])(image)
-        #image = transforms.Normalize(mean=[4.2011, 6.8036, 6.2111], std=[4.2011, 6.8036, 6.2111])(image)
-        image = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(image)
-        #[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
         
         # label = F.one_hot(label, num_classes=5)
         # print(f"Label: {label}")
 
         return image, label
+
+    def random_rotation(self, image):
+        angle = random.uniform(0, 360)
+        trans = transforms.RandomRotation(degrees=angle)
+        rotated_image = trans(image)
+        
+
+
+        return rotated_image
 
 
 # Test model from HW3 not as good as resnet but something that we tried 
@@ -148,6 +135,93 @@ class Net(nn.Module):
         x = self.fc3(x) 
         return x
 
+
+
+class RainNet(nn.Module):
+    def __init__(self, input_channels=4, mode="segmentation"):
+        super(RainNet, self).__init__()
+        
+        self.conv1f = nn.Conv2d(input_channels, 64, kernel_size=3, padding=1)
+        self.conv1s = nn.Conv2d(64, 64, kernel_size=3, padding=1)
+        self.conv2f = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.conv2s = nn.Conv2d(128, 128, kernel_size=3, padding=1)
+        self.conv3f = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.conv3s = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+        self.conv4f = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.conv4s = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.conv5f = nn.Conv2d(512, 1024, kernel_size=3, padding=1)
+        self.conv5s = nn.Conv2d(1024, 1024, kernel_size=3, padding=1)
+
+        self.up6 = nn.ConvTranspose2d(1024, 512, kernel_size=2, stride=2)
+        self.conv6 = nn.Conv2d(1024, 512, kernel_size=3, padding=1)
+        self.conv6_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+
+        self.up7 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
+        self.conv7 = nn.Conv2d(512, 256, kernel_size=3, padding=1)
+        self.conv7_2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+
+        self.up8 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.conv8 = nn.Conv2d(256, 128, kernel_size=3, padding=1)
+        self.conv8_2 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
+
+        self.up9 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.conv9 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
+        self.conv9_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
+        self.conv9_3 = nn.Conv2d(64, 2, kernel_size=3, padding=1)
+
+        if mode == "regression":
+            self.outputs = nn.Conv2d(2, 1, kernel_size=1)
+        elif mode == "segmentation":
+            self.outputs = nn.Conv2d(2, 1, kernel_size=1)
+
+    def forward(self, x):
+        conv1f = F.relu(self.conv1f(x))
+        conv1s = F.relu(self.conv1s(conv1f))
+        pool1 = F.max_pool2d(conv1s, kernel_size=2, stride=2)
+
+        conv2f = F.relu(self.conv2f(pool1))
+        conv2s = F.relu(self.conv2s(conv2f))
+        pool2 = F.max_pool2d(conv2s, kernel_size=2, stride=2)
+
+        conv3f = F.relu(self.conv3f(pool2))
+        conv3s = F.relu(self.conv3s(conv3f))
+        pool3 = F.max_pool2d(conv3s, kernel_size=2, stride=2)
+
+        conv4f = F.relu(self.conv4f(pool3))
+        conv4s = F.relu(self.conv4s(conv4f))
+        drop4 = F.dropout2d(conv4s, p=0.5)
+        pool4 = F.max_pool2d(drop4, kernel_size=2, stride=2)
+
+        conv5f = F.relu(self.conv5f(pool4))
+        conv5s = F.relu(self.conv5s(conv5f))
+        drop5 = F.dropout2d(conv5s, p=0.5)
+
+        up6 = F.interpolate(drop5, scale_factor=2, mode='bilinear', align_corners=False)
+        up6 = torch.cat([up6, conv4s], dim=1)
+        conv6 = F.relu(self.conv6(up6))
+        conv6 = F.relu(self.conv6_2(conv6))
+
+        up7 = F.interpolate(conv6, scale_factor=2, mode='bilinear', align_corners=False)
+        up7 = torch.cat([up7, conv3s], dim=1)
+        conv7 = F.relu(self.conv7(up7))
+        conv7 = F.relu(self.conv7_2(conv7))
+
+        up8 = F.interpolate(conv7, scale_factor=2, mode='bilinear', align_corners=False)
+        up8 = torch.cat([up8, conv2s], dim=1)
+        conv8 = F.relu(self.conv8(up8))
+        conv8 = F.relu(self.conv8_2(conv8))
+
+        up9 = F.interpolate(conv8, scale_factor=2, mode='bilinear', align_corners=False)
+        up9 = torch.cat([up9, conv1s], dim=1)
+        conv9 = F.relu(self.conv9(up9))
+        conv9 = F.relu(self.conv9_2(conv9))
+        conv9 = F.relu(self.conv9_3(conv9))
+
+        outputs = self.outputs(conv9)
+
+        return outputs
+    
+    
 model = resnet50(weights=None)
 # # model = resnet50()
 # model = resnet101(weights=None)
@@ -205,7 +279,7 @@ def getAllData():
     std_sum = 0.0
     total_samples = 0
 
-    data = MyDataset("./Data.csv", "./weather_used/", transform=None)
+    data = MyDataset("./NewData.csv", "./weather_new/", transform=None)
     # Train on 80% of the dataset
     train_size = int(0.8 * len(data)) 
 
@@ -224,7 +298,7 @@ def getData():
 
     # composed = transforms.Compose([
     # ])
-    data = MyDataset("./Data.csv", "./weather_used/", transform=None)
+    data = MyDataset("./NewData_maryland.csv", "./weather_new_maryland/", transform=None)
     # Train on 80% of the dataset
     train_size = int(0.8 * len(data)) 
 
@@ -257,7 +331,7 @@ def getData():
     train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
-    return train_dataset, val_dataset
+    return train_loader, val_loader 
 
 
 # test the model 
@@ -278,7 +352,7 @@ def test():
 
             output.data = torch.sigmoid(output) # Convert output data to between 0 and 1
 
-            print(f"Predictions: {np.round(output.numpy(), decimals=3)}")
+            # print(f"Predictions: {np.round(output.numpy(), decimals=3)}")
 
             # predictions = (output > 0.9).int()
             predictions = (output > 0.5).int()
@@ -372,11 +446,12 @@ def train(running_loss, epoch):
     
 
 if __name__ == '__main__':
-    num_epochs = 1000
-    batch_size = 1
+    num_epochs = 10 
+    batch_size = 32
     learning_rate = 0.001
-    log_interval = 128
+    log_interval = 32
     num_classes = 5
+    loss_list = []
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     # device = 'cpu'
@@ -386,6 +461,8 @@ if __name__ == '__main__':
     train_loader, val_loader = getData()
     # data = getData()
     # data
+
+    model.to(device)
      
     
     criterion = nn.MultiLabelSoftMarginLoss()
@@ -410,22 +487,30 @@ if __name__ == '__main__':
     test()
     for epoch in range(num_epochs):
         running_loss = 0.0
-        running_loss += train(running_loss)
+        running_loss += train(running_loss, epoch)
 
         average_loss = running_loss / len(train_loader)
 
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {average_loss:.4f}")
+        print(f"Epoch [{epoch + 1}/{num_epochs}], Average Loss: {average_loss:.4f}")
 
         # Test every 5 epochs 
         if epoch % 5 == 0:
             test()
 
+        loss_list.append(average_loss)
+
     # Final test
     test()
+    epoch_range = range(0, num_epochs)
+    plt.plot(epoch_range, loss_list)
+    plt.xlabel("Epoch")
+    plt.ylabel("Average Loss")
+    plt.title("Average Loss Over Time")
+    plt.grid(True)
 
     print("Training Finished")
     torch.save(model, "./model_FULL.pth")
-
+    plt.show()
 
 
 
